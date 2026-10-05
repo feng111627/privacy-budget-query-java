@@ -46,6 +46,20 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <testLogging>
+                        <events>
+                            <event>started</event>
+                            <event>passed</event>
+                            <event>skipped</event>
+                            <event>failed</event>
+                        </events>
+                    </testLogging>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
