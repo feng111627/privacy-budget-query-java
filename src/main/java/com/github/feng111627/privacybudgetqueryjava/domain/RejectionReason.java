@@ -12,6 +12,10 @@ public enum RejectionReason {
     DUPLICATE_REQUEST,
     /** 分组样本量不足，触发最小分组保护 */
     INSUFFICIENT_SAMPLE,
-    /** 字段未授权或已被撤权 */
-    FIELD_NOT_AUTHORIZED
+    /** 字段曾经授权但之后被撤权（与从未授权相区分） */
+    FIELD_NOT_AUTHORIZED,
+    /** 该调用方对该字段从来没有被授权过 */
+    FIELD_NEVER_GRANTED,
+    /** 指定的历史版本已超出保留窗口，无法复现 */
+    VERSION_NOT_FOUND
 }

@@ -3,6 +3,7 @@ package com.github.feng111627.privacybudgetqueryjava.ledger;
 import com.github.feng111627.privacybudgetqueryjava.domain.QueryResult;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,22 +15,52 @@ import java.util.concurrent.ConcurrentHashMap;
  * - 每个调用方一把锁，扣减与幂等登记在同一临界区内完成，
  *   并发下不会扣成负数，也不会对同一请求重复扣减。
  * - 每次充值开启新的预算批次，批次号用于噪声种子，保证同批次内结论可复现。
+ *
+ * 容量控制：每个调用方的幂等缓存为有界 LRU（默认保留最近
+ * {@value #DEFAULT_MAX_IDEMPOTENCY_ENTRIES} 条），长期运行不会无限堆积；
+ * 充值开新批次时整批清空。被淘汰的历史 requestId 不再享受重复提交保护，
+ * 这属于明确的容量取舍（与审计/版本快照的保留窗口策略一致）。
  */
 @Component
 public class BudgetLedger {
 
     private static final double EPSILON_TOLERANCE = 1e-9;
 
+    /** 每个调用方幂等缓存默认容量。 */
+    public static final int DEFAULT_MAX_IDEMPOTENCY_ENTRIES = 4_096;
+
+    private final int maxIdempotencyEntries;
+
     private static final class Account {
         double balance;
         long batch;
-        final Map<String, QueryResult> idempotencyCache = new ConcurrentHashMap<>();
+        final Map<String, QueryResult> idempotencyCache;
+
+        Account(int maxEntries) {
+            this.idempotencyCache = new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, QueryResult> eldest) {
+                    return size() > maxEntries;
+                }
+            };
+        }
     }
 
     private final Map<String, Account> accounts = new ConcurrentHashMap<>();
 
+    public BudgetLedger() {
+        this(DEFAULT_MAX_IDEMPOTENCY_ENTRIES);
+    }
+
+    public BudgetLedger(int maxIdempotencyEntries) {
+        if (maxIdempotencyEntries < 1) {
+            throw new IllegalArgumentException("maxIdempotencyEntries 必须 >= 1");
+        }
+        this.maxIdempotencyEntries = maxIdempotencyEntries;
+    }
+
     private Account accountOf(String callerId) {
-        return accounts.computeIfAbsent(callerId, k -> new Account());
+        return accounts.computeIfAbsent(callerId, k -> new Account(maxIdempotencyEntries));
     }
 
     /**

@@ -6,9 +6,9 @@ import com.github.feng111627.privacybudgetqueryjava.domain.QueryRequest;
 import com.github.feng111627.privacybudgetqueryjava.domain.RejectionReason;
 import com.github.feng111627.privacybudgetqueryjava.domain.StatisticType;
 import com.github.feng111627.privacybudgetqueryjava.ledger.BudgetLedger;
-import com.github.feng111627.privacybudgetqueryjava.policy.FieldPolicyService;
 import com.github.feng111627.privacybudgetqueryjava.query.Dataset;
 import com.github.feng111627.privacybudgetqueryjava.query.QueryService;
+import com.github.feng111627.privacybudgetqueryjava.versioning.SystemStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ConcurrentQueryTest {
 
+    private static final double EPSILON = SystemStateService.DEFAULT_PARAMS.epsilonPerQuery();
+
     private BudgetLedger ledger;
+    private SystemStateService state;
     private QueryService service;
 
     private static void log(String area, String caseName, String result) {
@@ -40,16 +43,18 @@ class ConcurrentQueryTest {
     @BeforeEach
     void setUp() {
         ledger = new BudgetLedger();
-        FieldPolicyService policy = new FieldPolicyService();
+        state = new SystemStateService();
         Dataset dataset = new Dataset();
         AuditTrail audit = new AuditTrail();
         dataset.put("salary", "eng", List.of(10.0, 20.0, 30.0, 40.0, 50.0, 60.0));
-        policy.grant("salary");
-        service = new QueryService(ledger, policy, dataset, audit);
+        state.grant("caller-x", "salary");
+        state.grant("caller-y", "salary");
+        service = new QueryService(ledger, state, dataset, audit);
     }
 
     private Map<RejectionReason, AtomicInteger> runConcurrent(int threads,
-                                                              java.util.function.IntFunction<QueryRequest> factory)
+                                                              java.util.function.IntFunction<QueryRequest> factory,
+                                                              Runnable racingAction)
             throws InterruptedException {
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         CountDownLatch ready = new CountDownLatch(threads);
@@ -74,6 +79,9 @@ class ConcurrentQueryTest {
         }
         assertTrue(ready.await(10, TimeUnit.SECONDS));
         go.countDown();
+        if (racingAction != null) {
+            racingAction.run();
+        }
         pool.shutdown();
         assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS));
         System.out.printf("[单测覆盖] 并发结果: 成功=%d, 拒绝分布=%s%n", ok.get(), rejections);
@@ -86,7 +94,8 @@ class ConcurrentQueryTest {
         ledger.topUp("caller-x", 0.5); // 最多 5 次成功
         int threads = 40;
         Map<RejectionReason, AtomicInteger> rejections = runConcurrent(threads,
-                i -> new QueryRequest("req-" + i, "caller-x", "salary", StatisticType.SUM, "eng"));
+                i -> new QueryRequest("req-" + i, "caller-x", "salary", StatisticType.SUM, "eng"),
+                null);
 
         int exhausted = rejections.getOrDefault(RejectionReason.BUDGET_EXHAUSTED, new AtomicInteger()).get();
         assertEquals(threads - 5, exhausted, "其余请求必须因预算耗尽被拒绝");
@@ -100,11 +109,12 @@ class ConcurrentQueryTest {
         ledger.topUp("caller-y", 1.0);
         int threads = 20;
         Map<RejectionReason, AtomicInteger> rejections = runConcurrent(threads,
-                i -> new QueryRequest("same-req", "caller-y", "salary", StatisticType.SUM, "eng"));
+                i -> new QueryRequest("same-req", "caller-y", "salary", StatisticType.SUM, "eng"),
+                null);
 
         int duplicates = rejections.getOrDefault(RejectionReason.DUPLICATE_REQUEST, new AtomicInteger()).get();
         assertEquals(threads - 1, duplicates, "除一次成功外其余必须判为重复提交");
-        assertEquals(1.0 - QueryService.EPSILON_PER_QUERY, ledger.balanceOf("caller-y"), 1e-9,
+        assertEquals(1.0 - EPSILON, ledger.balanceOf("caller-y"), 1e-9,
                 "同一请求只扣一次预算");
         log("并发查询", "20线程同requestId", "通过: 成功1次, 重复拒绝19次, 只扣一次预算");
     }

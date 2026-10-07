@@ -8,7 +8,7 @@ package com.github.feng111627.privacybudgetqueryjava.domain;
  * @param epsilonConsumed 本次查询实际消耗的隐私预算
  * @param budgetRemaining 扣减后调用方剩余预算
  * @param batchId         预算批次号（同批次同查询结论可复现）
- * @param policyVersion   查询时生效的授权规则版本，用于历史结论追溯
+ * @param version         查询完整钉住的系统版本（参数 + 按调用方授权态），用于历史结论追溯与复现
  * @param sampleSize      参与统计的样本量
  * @param explanation     人类可读的预算消耗与误差说明
  */
@@ -17,7 +17,7 @@ public record QueryResult(double value,
                           double epsilonConsumed,
                           double budgetRemaining,
                           long batchId,
-                          long policyVersion,
+                          long version,
                           int sampleSize,
                           String explanation) {
 }
