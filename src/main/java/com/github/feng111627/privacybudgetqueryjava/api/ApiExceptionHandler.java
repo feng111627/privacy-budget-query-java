@@ -21,7 +21,7 @@ public class ApiExceptionHandler {
             case BUDGET_EXHAUSTED -> HttpStatus.PAYMENT_REQUIRED;
             case DUPLICATE_REQUEST -> HttpStatus.CONFLICT;
             case INSUFFICIENT_SAMPLE -> HttpStatus.UNPROCESSABLE_ENTITY;
-            case FIELD_NOT_AUTHORIZED -> HttpStatus.FORBIDDEN;
+            case FIELD_NEVER_AUTHORIZED, FIELD_AUTHORIZATION_REVOKED -> HttpStatus.FORBIDDEN;
         };
         return ResponseEntity.status(status).body(Map.of(
                 "rejected", true,

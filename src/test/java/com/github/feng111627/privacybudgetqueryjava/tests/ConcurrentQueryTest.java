@@ -44,7 +44,8 @@ class ConcurrentQueryTest {
         Dataset dataset = new Dataset();
         AuditTrail audit = new AuditTrail();
         dataset.put("salary", "eng", List.of(10.0, 20.0, 30.0, 40.0, 50.0, 60.0));
-        policy.grant("salary");
+        policy.grant("caller-x", "salary");
+        policy.grant("caller-y", "salary");
         service = new QueryService(ledger, policy, dataset, audit);
     }
 

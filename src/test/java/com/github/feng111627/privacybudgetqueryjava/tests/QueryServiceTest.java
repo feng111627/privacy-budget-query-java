@@ -46,7 +46,7 @@ class QueryServiceTest {
 
         dataset.put("salary", "eng", List.of(10.0, 20.0, 30.0, 40.0, 50.0, 60.0));
         dataset.put("salary", "tiny", List.of(1.0, 2.0));
-        policy.grant("salary");
+        policy.grant("caller-1", "salary");
     }
 
     private QueryRequest req(String caller, String reqId, String group) {
@@ -112,8 +112,8 @@ class QueryServiceTest {
         ledger.topUp("caller-1", 1.0);
         RejectionReason reason = reasonOf(
                 new QueryRequest("r1", "caller-1", "secret", StatisticType.COUNT, null));
-        assertEquals(RejectionReason.FIELD_NOT_AUTHORIZED, reason);
-        log("统计查询", "未授权字段", "通过: 原因=" + reason);
+        assertEquals(RejectionReason.FIELD_NEVER_AUTHORIZED, reason);
+        log("统计查询", "从未授权字段", "通过: 原因=" + reason);
     }
 
     @Test
@@ -137,12 +137,12 @@ class QueryServiceTest {
         QueryResult before = service.execute(req("caller-1", "r1", "eng"));
         long versionAtQuery = before.policyVersion();
 
-        policy.revoke("salary");
+        policy.revoke("caller-1", "salary");
         RejectionReason reason = reasonOf(req("caller-1", "r2", "eng"));
-        assertEquals(RejectionReason.FIELD_NOT_AUTHORIZED, reason, "撤权后必须拒绝");
+        assertEquals(RejectionReason.FIELD_AUTHORIZATION_REVOKED, reason, "撤权后必须拒绝");
 
-        assertTrue(policy.isAuthorizedAt("salary", versionAtQuery),
-                "历史版本下字段当时是授权的，结论可追溯复现");
+        assertTrue(policy.isAuthorizedAt("caller-1", "salary", versionAtQuery),
+                "历史版本下该调用方对字段当时是授权的，结论可追溯复现");
         assertEquals(versionAtQuery, audit.entriesOf("caller-1").get(0).policyVersion(),
                 "审计必须记录当时生效的规则版本");
         log("统计查询", "撤权与版本追溯", "通过: 撤权后拒绝, 历史版本v" + versionAtQuery + "可复现");

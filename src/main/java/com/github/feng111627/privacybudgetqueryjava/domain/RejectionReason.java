@@ -12,6 +12,8 @@ public enum RejectionReason {
     DUPLICATE_REQUEST,
     /** 分组样本量不足，触发最小分组保护 */
     INSUFFICIENT_SAMPLE,
-    /** 字段未授权或已被撤权 */
-    FIELD_NOT_AUTHORIZED
+    /** 该调用方对该字段从未授权过（与“授权后又被撤掉”严格区分） */
+    FIELD_NEVER_AUTHORIZED,
+    /** 该调用方曾被授权该字段，但授权状态已被撤掉 */
+    FIELD_AUTHORIZATION_REVOKED
 }
